@@ -1,0 +1,29 @@
+server:
+  port: 8080
+
+security:
+  mtls:
+    keystore:
+      path: src/main/resources/certs/client-keystore.p12
+      password: changeit
+    truststore:
+      path: src/main/resources/certs/client-truststore.jks
+      password: changeit
+  jws:
+    keystore:
+      path: src/main/resources/certs/jws-signer.p12
+      password: changeit
+    key:
+      alias: signer
+      password: changeit
+
+proxy:
+  routes:
+    - name: uae-accounts
+      path: /proxy/uae/accounts/**
+      profile: UAE_OB
+      targetUrl: https://postman-echo.com/get
+      openApiSpec: src/main/resources/openapi/uae-openbanking-sample.yaml
+      requiredHeaders:
+        - x-fapi-interaction-id
+        - x-customer-ip-address

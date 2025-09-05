@@ -1,0 +1,36 @@
+openapi: 3.0.3
+info:
+  title: UAE Open Banking - Sample Accounts API
+  version: '1.0.0-sample'
+servers:
+  - url: /proxy/uae/accounts
+paths:
+  /balances:
+    get:
+      summary: Get account balances
+      parameters:
+        - in: header
+          name: x-fapi-interaction-id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: header
+          name: x-customer-ip-address
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        accountId: { type: string }
+                        balance: { type: number }
+                  meta:
+                    type: object
