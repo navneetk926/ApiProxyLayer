@@ -1,0 +1,17 @@
+request
+{
+"eventName": "PAYMENT.STATUS.UPDATED",
+"eventType": "PAYMENT.STATUS.UPDATED",
+"eventId": "abc123",
+"timestamp": "2025-12-08T12:00:00Z",
+"data": {
+"referenceId": "XYZ789",
+"status": "SETTLED",
+"amount": "1000",
+"currency": "USD"
+}
+}
+
+response
+
+"callbackUrl": "https://merchant.com/webhook/notifications",
