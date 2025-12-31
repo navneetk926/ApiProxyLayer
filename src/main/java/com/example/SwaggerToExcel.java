@@ -18,7 +18,7 @@ public class SwaggerToExcel {
     private static int rowNum = 1;
     public static void main(String[] args) throws Exception {
 
-        String swaggerFile = "C:\\Users\\ADMIN\\Downloads\\accounts.yaml";
+        String swaggerFile = "C:\\Users\\ADMIN\\Downloads\\paymentinitiation-pain103.yaml";
         String outputFile = "C:\\Users\\ADMIN\\Downloads\\uae.xlsx";
 
         ParseOptions options = new ParseOptions();
@@ -256,9 +256,18 @@ public class SwaggerToExcel {
                         prepareExcelObject(sheet,contentType,childSchemaValue, apiFieldDef.getSchemaPath(), code, path, method,
                             reqOrRes, property, schemaValue.getItems().getRequired());
                         });
-                    }else{
+                    }else if(reqOrRes.equalsIgnoreCase("Response") && schemaValue.getProperties() != null){
+                        schemaValue.getProperties().forEach((property,item)->{
+                            Schema<?> childSchemaValue = schemaValue.getProperties().get(property);
+
+                            prepareExcelObject(sheet,contentType,childSchemaValue, apiFieldDef.getSchemaPath(), code, path, method,
+                                  reqOrRes, property, schemaValue.getRequired());
+
+
+                    });
+                }else{
                         writeSwaggerResponseToExcel(sheet, apiFieldDef);
-                }
+                    }
                 }
         }else{
             ApiFieldDef apiFieldDef = getApiFieldDef(contentType, operationId, code, path, method, reqOrRes, schema.getTitle(), schema,requirestList, childProperty);
@@ -277,8 +286,14 @@ public class SwaggerToExcel {
             apiFieldDef.setSchemaPath(operationId +"."+ property);
             apiFieldDef.setType(schemaValue.getType());
         }else{
-            apiFieldDef.setSchemaPath(operationId );
-            apiFieldDef.setType("object");
+            if(subPath != null && !subPath.isEmpty() && !subPath.equalsIgnoreCase("200")){
+                apiFieldDef.setSchemaPath(operationId +"."+ subPath);
+                apiFieldDef.setType( "string");
+            }else{
+                apiFieldDef.setSchemaPath(operationId );
+                apiFieldDef.setType("object");
+            }
+
         }
 
 
