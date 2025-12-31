@@ -1,9 +1,8 @@
-package example.swagger;
+package org.example.swagger;
 
 import io.swagger.v3.oas.models.*;
 import io.swagger.v3.oas.models.servers.Server;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
-import io.swagger.v3.oas.models.parameters.Parameter;
 import io.swagger.v3.oas.models.media.*;
 import io.swagger.v3.oas.models.responses.ApiResponse;
 import io.swagger.v3.parser.OpenAPIV3Parser;
@@ -16,11 +15,11 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class SwaggerToExcel {
-
+    private static int rowNum = 1;
     public static void main(String[] args) throws Exception {
 
         String swaggerFile = "C:\\Users\\ADMIN\\Downloads\\accounts.yaml";
-        String outputFile = "C:\\Users\\ADMIN\\Downloads\\accounts.xlsx";
+        String outputFile = "C:\\Users\\ADMIN\\Downloads\\uae.xlsx";
 
         ParseOptions options = new ParseOptions();
         options.setResolve(true);
@@ -33,9 +32,7 @@ public class SwaggerToExcel {
         createInfoSheet(workbook, openAPI);
         createServerSecuritySheet(workbook, openAPI);
         createApiSheet(workbook, openAPI);
-        createParameterSheet(workbook, openAPI);
-        createRequestBodySheet(workbook, openAPI);
-        createResponseSheet(workbook, openAPI);
+        createRequestResponseSheet(workbook, openAPI);
 
         FileOutputStream fos = new FileOutputStream(outputFile);
         workbook.write(fos);
@@ -127,170 +124,210 @@ public class SwaggerToExcel {
         });
     }
 
-    // ================= PARAMETERS SHEET =================
-    private static void createParameterSheet(Workbook wb, OpenAPI api) {
-        Sheet sheet = wb.createSheet("Parameters");
-        Row header = sheet.createRow(0);
-        header.createCell(0).setCellValue("Path");
-        header.createCell(1).setCellValue("Method");
-        header.createCell(2).setCellValue("Name");
-        header.createCell(3).setCellValue("In");
-        header.createCell(4).setCellValue("Type");
-        header.createCell(5).setCellValue("Required");
-        header.createCell(6).setCellValue("Description");
-        header.createCell(7).setCellValue("Enum");
-        header.createCell(8).setCellValue("Example");
-        header.createCell(9).setCellValue("Reference");
 
-        AtomicInteger rowNum = new AtomicInteger(1);
-        api.getPaths().forEach((path, item) -> {
-            item.readOperationsMap().forEach((method, op) -> {
-                if (op.getParameters() != null) {
-                    for (Parameter p : op.getParameters()) {
-                        Row row = sheet.createRow(rowNum.getAndIncrement());
-                        row.createCell(0).setCellValue(path);
-                        row.createCell(1).setCellValue(method.name());
-                        row.createCell(2).setCellValue(p.getName());
-                        row.createCell(3).setCellValue(p.getIn());
-                        Schema<?> schema = p.getSchema();
-                        if (schema != null) {
-                            row.createCell(4).setCellValue(schema.getType() != null ? schema.getType() : "");
-                            row.createCell(7).setCellValue(schema.getEnum() != null ? schema.getEnum().toString() : "");
-                            row.createCell(8).setCellValue(schema.getExample() != null ? schema.getExample().toString() : "");
-                            row.createCell(9).setCellValue(schema.get$ref() != null ? schema.get$ref() : "");
-                        }
-                        row.createCell(5).setCellValue(p.getRequired() != null && p.getRequired());
-                        row.createCell(6).setCellValue(p.getDescription() != null ? p.getDescription() : "");
-                    }
-                }
-            });
-        });
-    }
 
-    // ================= REQUEST BODY SHEET =================
-    private static void createRequestBodySheet(Workbook wb, OpenAPI api) {
-        Sheet sheet = wb.createSheet("RequestBody");
-        Row header = sheet.createRow(0);
-        header.createCell(0).setCellValue("Path");
-        header.createCell(1).setCellValue("Method");
-        header.createCell(2).setCellValue("Field Path");
-        header.createCell(3).setCellValue("Type");
-        header.createCell(4).setCellValue("Description");
-        header.createCell(5).setCellValue("Enum");
-        header.createCell(6).setCellValue("Example");
-        header.createCell(7).setCellValue("Reference");
-
-        int[] rowNum = {1};
+    // =================REQUEST RESPONSES SHEET =================
+    private static void createRequestResponseSheet(Workbook wb, OpenAPI api) {
+        Sheet sheet = createHeaderExcelRow(wb);
+        rowNum = 1;
         api.getPaths().forEach((path, item) ->
                 item.readOperationsMap().forEach((method, op) -> {
-                    if (op.getRequestBody() == null || op.getRequestBody().getContent() == null) return;
+                    if(op.getParameters() != null) {
+                        op.getParameters().forEach(parameter -> {
+                            ApiFieldDef apiFieldDef = new ApiFieldDef();
+                            apiFieldDef.setPath(path);
+                            apiFieldDef.setMethod(method.name());
+                            apiFieldDef.setHeaderOrBody("Header");
+                            apiFieldDef.setMandatory(parameter.getRequired());
+                            apiFieldDef.setDesc(parameter.getDescription());
+                            if(parameter.getSchema() != null ) {
+                                apiFieldDef.setTitle(parameter.getSchema().getTitle());
+                                apiFieldDef.setType(parameter.getSchema().getType());
+                            }
+                            if(apiFieldDef.getTitle() == null) {
+                                apiFieldDef.setTitle(parameter.getName());
+                            }
+                            apiFieldDef.setDesc(parameter.getDescription());
+                            if(parameter.getExample() != null) {
+                                apiFieldDef.setExample(parameter.getExample().toString());
+                            }
 
-                    for (MediaType mt : op.getRequestBody().getContent().values()) {
-                        flattenSchema(sheet, path, method.name(), "", mt.getSchema(), rowNum);
+                            apiFieldDef.setRequestOrResponse("Request");
+                            writeSwaggerResponseToExcel(sheet, apiFieldDef);
+                        });
+                    }
+                    if (op.getResponses() != null){
+                        for (Map.Entry<String, ApiResponse> e : op.getResponses().entrySet()) {
+                            ApiResponse resp = e.getValue();
+
+                            if (resp.getHeaders() != null) {
+                                resp.getHeaders().keySet().forEach(header -> {
+                                    io.swagger.v3.oas.models.headers.Header h = resp.getHeaders().get(header);
+                                    ApiFieldDef apiFieldDef = new ApiFieldDef();
+                                    apiFieldDef.setPath(path);
+                                    apiFieldDef.setMethod(method.name());
+                                    apiFieldDef.setCode(e.getKey());
+                                    if(h.getSchema() != null && h.getSchema().getTitle() != null) {
+                                        apiFieldDef.setTitle(h.getSchema().getTitle());
+                                    }
+                                    if(h.getSchema() != null && h.getSchema().getType()!= null) {
+                                        apiFieldDef.setType(h.getSchema().getType());
+                                    }
+                                    apiFieldDef.setSchemaPath(op.getOperationId()+e.getKey());
+                                    apiFieldDef.setHeaderOrBody("Header");
+                                    if(h.getSchema() != null && h.getSchema().getDescription() != null) {
+                                        apiFieldDef.setDesc(h.getSchema().getDescription());
+                                    }else{
+                                        apiFieldDef.setDesc(resp.getDescription());
+                                    }
+                                    if(h.getSchema() != null && h.getSchema().getMinLength() != null) {
+                                        apiFieldDef.setMinValue(Double.valueOf(h.getSchema().getMinLength()));
+                                    }
+                                    if(h.getSchema() != null && h.getSchema().getMaxLength() != null) {
+                                        apiFieldDef.setMaxValue(Double.valueOf(h.getSchema().getMaxLength()));
+                                    }
+                                    if(h.getSchema() != null && h.getSchema().getExample() != null) {
+                                        apiFieldDef.setExample(h.getSchema().getExample().toString());
+                                    }else if(h.getExample() != null){
+                                        apiFieldDef.setExample(h.getExample().toString());
+                                    }
+
+                                    apiFieldDef.setRequestOrResponse("Response");
+                                    writeSwaggerResponseToExcel(sheet, apiFieldDef);
+                                });
+
+                            }
+                            if (resp.getContent() != null) {
+                                Set<Map.Entry<String, MediaType>> entrySet = resp.getContent().entrySet();
+
+                                if(!entrySet.isEmpty()){
+                                    Map.Entry<String, MediaType> entry = entrySet.iterator().next();
+                                    String mediaType = entry.getKey();          // 🔥 application/json
+                                    MediaType mt = entry.getValue();             // schema, examples, etc.
+                                    //String contentType = entrySet.size() >1 ? "application/json,application/xml": mediaType;
+                                    Schema<?> schema = mt.getSchema();
+                                    prepareExcelObject(sheet,mediaType,
+                                            schema, op.getOperationId()+e.getKey(), e.getKey(),
+                                            path, method.name(), "Response", "", schema.getRequired());
+                                }
+                            }
+                        }
                     }
                 })
         );
     }
 
-    // ================= RESPONSES SHEET =================
-    private static void createResponseSheet(Workbook wb, OpenAPI api) {
-        Sheet sheet = wb.createSheet("Responses");
+    private static Sheet createHeaderExcelRow(Workbook wb) {
+        Sheet sheet = wb.createSheet("RequestResponses");
         Row header = sheet.createRow(0);
         header.createCell(0).setCellValue("Path");
         header.createCell(1).setCellValue("Method");
         header.createCell(2).setCellValue("HTTP Code");
         header.createCell(3).setCellValue("Field Path");
         header.createCell(4).setCellValue("Type");
-        header.createCell(5).setCellValue("Summary");
+        header.createCell(5).setCellValue("Title");
         header.createCell(6).setCellValue("Example");
         header.createCell(7).setCellValue("Reference");
-
-        int[] rowNum = {1};
-        api.getPaths().forEach((path, item) ->
-                item.readOperationsMap().forEach((method, op) -> {
-                    if (op.getResponses() == null) return;
-                    for (Map.Entry<String, ApiResponse> e : op.getResponses().entrySet()) {
-                        String code = e.getKey();
-                        ApiResponse resp = e.getValue();
-                        if (resp.getContent() == null) continue;
-
-                        for (MediaType mt : resp.getContent().values()) {
-                            flattenSchemaResponse(sheet, path, method.name(), code, "", mt.getSchema(), resp.getDescription(), rowNum);
-                        }
-                    }
-                })
-        );
+        header.createCell(8).setCellValue("Description");
+        header.createCell(9).setCellValue("ContentType");
+        header.createCell(10).setCellValue("BodyOrHeader");
+        header.createCell(11).setCellValue("RequestOrResponse");
+        header.createCell(12).setCellValue("IsMandatory");
+        header.createCell(13).setCellValue("MinValue");
+        header.createCell(14).setCellValue("MaxValue");
+        header.createCell(15).setCellValue("EnumValue");
+        return sheet;
     }
 
-    // ================= Flatten Schema for RequestBody =================
-    private static void flattenSchema(Sheet sheet, String path, String method, String prefix, Schema<?> schema, int[] r) {
-        if (schema == null) return;
+    private static void prepareExcelObject(Sheet sheet, String contentType, Schema<?> schema,
+                                           String operationId, String code, String path, String method,
+                                           String reqOrRes, String childProperty, List<String> requirestList){
 
-        String fieldName = prefix.isEmpty() ? "" : prefix;
 
-        if (schema.getProperties() != null) {
-            for (Map.Entry<String, Schema> e : schema.getProperties().entrySet()) {
-                Schema<?> s = e.getValue();
-                String fieldPath = fieldName.isEmpty() ? e.getKey() : fieldName + "." + e.getKey();
-
-                Row row = sheet.createRow(r[0]++);
-                row.createCell(0).setCellValue(path);
-                row.createCell(1).setCellValue(method);
-                row.createCell(2).setCellValue(fieldPath);
-                row.createCell(3).setCellValue(s.getType() != null ? s.getType() : "object");
-                row.createCell(4).setCellValue(s.getDescription() != null ? s.getDescription() : "");
-                row.createCell(5).setCellValue(s.getEnum() != null ? s.getEnum().toString() : "");
-                row.createCell(6).setCellValue(s.getExample() != null ? s.getExample().toString() : "");
-                if (schema instanceof ArraySchema) {
-                    Schema<?> items = ((ArraySchema) schema).getItems();
-                    if (items.get$ref() != null) {
-                        row.createCell(7).setCellValue(items.get$ref());
-                    }
-                    flattenSchema(sheet, path, method, fieldPath + "[]", items, r);
-                }else if (schema.get$ref() != null) {
-                    row.createCell(7).setCellValue(schema.get$ref());
-                } else {
-                    row.createCell(7).setCellValue("");
+        if(schema.getProperties() != null ){
+            Iterator<Map.Entry<String, Schema>> propertyIterator = schema.getProperties().entrySet().iterator();
+            while (propertyIterator.hasNext()) {
+                Map.Entry<String, Schema> mapElement = propertyIterator.next();
+                Schema<?> schemaValue = schema.getProperties().get(mapElement.getKey());
+                ApiFieldDef apiFieldDef = getApiFieldDef(contentType, operationId, code, path, method, reqOrRes, mapElement.getKey(), schemaValue, requirestList, childProperty);
+                if(reqOrRes.equalsIgnoreCase("Response") && schemaValue.getItems() != null && schemaValue.getItems().getProperties() != null){
+                    schemaValue.getItems().getProperties().forEach((property,item)->{
+                        Schema<?> childSchemaValue = schemaValue.getItems().getProperties().get(property);
+                        prepareExcelObject(sheet,contentType,childSchemaValue, apiFieldDef.getSchemaPath(), code, path, method,
+                            reqOrRes, property, schemaValue.getItems().getRequired());
+                        });
+                    }else{
+                        writeSwaggerResponseToExcel(sheet, apiFieldDef);
                 }
-
-                flattenSchema(sheet, path, method, fieldPath, s, r);
-            }
+                }
+        }else{
+            ApiFieldDef apiFieldDef = getApiFieldDef(contentType, operationId, code, path, method, reqOrRes, schema.getTitle(), schema,requirestList, childProperty);
+            writeSwaggerResponseToExcel(sheet, apiFieldDef);
         }
     }
 
-    // ================= Flatten Schema for Response =================
-    private static void flattenSchemaResponse(Sheet sheet, String path, String method, String code, String prefix, Schema<?> schema, String summary, int[] r) {
-        if (schema == null) return;
-
-        String fieldName = prefix.isEmpty() ? "" : prefix;
-
-        if (schema.getProperties() != null) {
-            for (Map.Entry<String, Schema> e : schema.getProperties().entrySet()) {
-                Schema<?> s = e.getValue();
-                String fieldPath = fieldName.isEmpty() ? e.getKey() : fieldName + "." + e.getKey();
-
-                Row row = sheet.createRow(r[0]++);
-                row.createCell(0).setCellValue(path);
-                row.createCell(1).setCellValue(method);
-                row.createCell(2).setCellValue(code);
-                row.createCell(3).setCellValue(fieldPath);
-                row.createCell(4).setCellValue(s.getType() != null ? s.getType() : "object");
-                row.createCell(5).setCellValue(summary != null ? summary : "");
-                row.createCell(6).setCellValue(s.getExample() != null ? s.getExample().toString() : "");
-                if (schema instanceof ArraySchema) {
-                    Schema<?> items = ((ArraySchema) schema).getItems();
-                    if (items.get$ref() != null) {
-                        row.createCell(7).setCellValue(items.get$ref());
-                    }
-                    flattenSchema(sheet, path, method, fieldPath + "[]", items, r);
-                }else if (schema.get$ref() != null) {
-                    row.createCell(7).setCellValue(schema.get$ref());
-                } else {
-                    row.createCell(7).setCellValue("");
-                }
-
-                flattenSchemaResponse(sheet, path, method, code, fieldPath, s, summary, r);
-            }
+    private static ApiFieldDef getApiFieldDef(String contentType, String operationId, String code, String path, String method,
+                                              String reqOrRes, String subPath, Schema<?> schemaValue, List<String> requirestList,
+                                              String property) {
+        ApiFieldDef apiFieldDef = new ApiFieldDef();
+        apiFieldDef.setPath(path);
+        apiFieldDef.setMethod(method);
+        apiFieldDef.setCode(code);
+        if(property != null && !property.isEmpty()){
+            apiFieldDef.setSchemaPath(operationId +"."+ property);
+            apiFieldDef.setType(schemaValue.getType());
+        }else{
+            apiFieldDef.setSchemaPath(operationId );
+            apiFieldDef.setType("object");
         }
+
+
+        apiFieldDef.setHeaderOrBody("Body");
+        if(schemaValue.getExample() != null)
+            apiFieldDef.setExample(schemaValue.getExample().toString());
+        apiFieldDef.setTitle(schemaValue.getTitle());
+        apiFieldDef.setDesc(schemaValue.getDescription());
+        apiFieldDef.setContentType(contentType);
+        apiFieldDef.setRequestOrResponse(reqOrRes);
+        if(schemaValue.getMinLength() != null && schemaValue.getMinLength() > 0){
+            apiFieldDef.setMinValue(schemaValue.getMinLength().doubleValue());
+        }
+        if(schemaValue.getMaxLength() != null && schemaValue.getMaxLength() > 0){
+            apiFieldDef.setMaxValue(schemaValue.getMaxLength().doubleValue());
+        }
+
+        if(schemaValue.getEnum() != null)
+            apiFieldDef.setEnumValue(schemaValue.getEnum().toString());
+        if(requirestList != null && !requirestList.isEmpty() && requirestList.contains(property)){
+            apiFieldDef.setMandatory(Boolean.TRUE);
+        }else{
+            apiFieldDef.setMandatory(Boolean.FALSE);
+        }
+        return apiFieldDef;
     }
+
+    private static void writeSwaggerResponseToExcel(Sheet sheet, ApiFieldDef apiFieldDef) {
+
+        Row row = sheet.createRow(rowNum++);
+        row.createCell(0).setCellValue(apiFieldDef.getPath());
+        row.createCell(1).setCellValue(apiFieldDef.getMethod());
+        row.createCell(2).setCellValue(apiFieldDef.getCode());
+        row.createCell(3).setCellValue(apiFieldDef.getSchemaPath());
+        row.createCell(4).setCellValue(apiFieldDef.getType());
+        row.createCell(5).setCellValue(apiFieldDef.getTitle());
+        row.createCell(6).setCellValue(apiFieldDef.getExample());
+        row.createCell(7).setCellValue(apiFieldDef.get$ref());
+        row.createCell(8).setCellValue(apiFieldDef.getDesc());
+        row.createCell(9).setCellValue(apiFieldDef.getContentType());
+        row.createCell(10).setCellValue(apiFieldDef.getHeaderOrBody());
+        row.createCell(11).setCellValue(apiFieldDef.getRequestOrResponse());
+        row.createCell(12).setCellValue(apiFieldDef.isMandatory);
+        if(apiFieldDef.getMinValue() != null)
+            row.createCell(13).setCellValue(apiFieldDef.getMinValue());
+        if(apiFieldDef.getMaxValue() != null)
+            row.createCell(14).setCellValue(apiFieldDef.getMaxValue());
+        row.createCell(15).setCellValue(apiFieldDef.getEnumValue());
+    }
+
+
 }
